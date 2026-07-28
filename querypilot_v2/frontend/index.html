@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>QueryPilot v2</title>
+<script defer src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js"
+  integrity="sha384-l8f0VcPi/M1iHPv8egOnY/15TDwqgbOR1anMIJWvU6nLRgZVLTLSaNqi/TOoT5Fh"
+  crossorigin="anonymous"></script>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; display: flex; height: 100vh; }
+  aside { width: 280px; border-right: 1px solid #8884; padding: 1rem; overflow-y: auto; }
+  main { flex: 1; padding: 1.5rem; overflow-y: auto; }
+  h1 { font-size: 1.1rem; margin: 0 0 1rem; }
+  .history-item { padding: .5rem; border-radius: 6px; cursor: pointer; font-size: .85rem; margin-bottom: .25rem; }
+  .history-item:hover { background: #8882; }
+  textarea, input[type=text] { width: 100%; box-sizing: border-box; padding: .6rem; font-size: 1rem; border-radius: 8px; border: 1px solid #8886; }
+  button { padding: .55rem 1.1rem; border-radius: 8px; border: none; background: #4f46e5; color: white; cursor: pointer; font-size: .95rem; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  pre.sql { background: #1118; padding: 1rem; border-radius: 8px; overflow-x: auto; }
+  .kw { color: #a78bfa; font-weight: 600; }
+  table { border-collapse: collapse; width: 100%; margin-top: .5rem; font-size: .9rem; }
+  th, td { border: 1px solid #8884; padding: .4rem .6rem; text-align: left; }
+  th { background: #8882; }
+  .chip { display: inline-block; background: #8882; border-radius: 999px; padding: .2rem .7rem; font-size: .8rem; margin: .15rem; }
+  .error { color: #ef4444; }
+  .row { display: flex; gap: .5rem; align-items: center; margin-top: .75rem; }
+  section { margin-top: 1.25rem; }
+  label.upload { display: inline-block; padding: .5rem .9rem; border: 1px dashed #8888; border-radius: 8px; cursor: pointer; font-size: .85rem; }
+</style>
+</head>
+<body x-data="app()" x-init="loadHistory()">
+
+<aside>
+  <h1>History</h1>
+  <template x-for="item in history" :key="item.id">
+    <div class="history-item" @click="question = item.question">
+      <div x-text="item.question"></div>
+      <small x-text="new Date(item.created_at).toLocaleString()"></small>
+    </div>
+  </template>
+
+  <section>
+    <label class="upload">
+      Upload .db file
+      <input type="file" accept=".db" style="display:none" @change="uploadDb($event)">
+    </label>
+    <div x-show="uploadStatus" x-text="uploadStatus" style="font-size:.8rem; margin-top:.5rem"></div>
+  </section>
+</aside>
+
+<main>
+  <h1>QueryPilot v2 — ask your database anything</h1>
+
+  <div class="row">
+    <input type="text" x-model="question" @keydown.enter="runQuery()" placeholder="e.g. Which customers have the highest failed transaction rate?">
+    <button @click="runQuery()" :disabled="loading || !question">Ask</button>
+  </div>
+
+  <section x-show="error" class="error" x-text="error"></section>
+
+  <section x-show="sql">
+    <h3>Generated SQL <span x-show="confidence !== null" class="chip" x-text="'confidence ' + confidence"></span></h3>
+    <pre class="sql" x-html="highlight(sql)"></pre>
+  </section>
+
+  <section x-show="retrievedSchemas.length">
+    <h3>Schema chunks used (RAG retrieval, not the full schema dump)</h3>
+    <template x-for="t in retrievedSchemas"><span class="chip" x-text="t"></span></template>
+  </section>
+
+  <section x-show="explanation">
+    <h3>Explanation</h3>
+    <p x-text="explanation"></p>
+  </section>
+
+  <section x-show="results.length">
+    <h3>Results (<span x-text="results.length"></span> rows)</h3>
+    <table>
+      <thead><tr><template x-for="col in resultColumns"><th x-text="col"></th></template></tr></thead>
+      <tbody>
+        <template x-for="(row, i) in results" :key="i">
+          <tr><template x-for="col in resultColumns"><td x-text="row[col]"></td></template></tr>
+        </template>
+      </tbody>
+    </table>
+  </section>
+
+  <section x-show="queryId !== null">
+    <h3>Feedback</h3>
+    <button @click="sendFeedback(1)">👍 correct</button>
+    <button @click="sendFeedback(-1)">👎 wrong</button>
+  </section>
+</main>
+
+<script>
+function app() {
+  return {
+    question: "", sql: "", explanation: "", confidence: null, error: "",
+    results: [], resultColumns: [], retrievedSchemas: [], history: [],
+    queryId: null, loading: false, uploadStatus: "",
+
+    async loadHistory() {
+      const res = await fetch("/api/history");
+      if (res.ok) this.history = await res.json();
+    },
+
+    async runQuery() {
+      if (!this.question || this.loading) return;
+      this.loading = true; this.error = ""; this.sql = ""; this.results = [];
+      try {
+        const res = await fetch("/api/query", {
+          method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({question: this.question}),
+        });
+        const data = await res.json();
+        if (!res.ok) { this.error = data.detail || "query failed"; return; }
+        this.sql = data.sql;
+        this.explanation = data.explanation;
+        this.confidence = data.confidence;
+        this.retrievedSchemas = data.retrieved_schemas || [];
+        this.results = data.results || [];
+        this.resultColumns = this.results.length ? Object.keys(this.results[0]) : [];
+        this.queryId = data.query_id;
+        this.loadHistory();
+      } catch (e) {
+        this.error = "network error contacting the API";
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async sendFeedback(rating) {
+      if (this.queryId === null) return;
+      await fetch("/api/feedback", {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({query_id: this.queryId, rating}),
+      });
+    },
+
+    async uploadDb(evt) {
+      const file = evt.target.files[0];
+      if (!file) return;
+      const form = new FormData();
+      form.append("file", file);
+      this.uploadStatus = "uploading...";
+      const res = await fetch("/api/upload-db", { method: "POST", body: form });
+      const data = await res.json();
+      this.uploadStatus = res.ok ? `indexed ${data.tables_indexed} tables from ${data.db_name}` : (data.detail || "upload failed");
+    },
+
+    highlight(sql) {
+      const keywords = /\b(SELECT|FROM|WHERE|JOIN|LEFT|RIGHT|INNER|ON|GROUP BY|ORDER BY|LIMIT|WITH|AS|AND|OR|COUNT|SUM|AVG|MAX|MIN|DESC|ASC)\b/gi;
+      return sql.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(keywords, m => `<span class="kw">${m}</span>`);
+    },
+  };
+}
+</script>
+</body>
+</html>

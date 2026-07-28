@@ -1,0 +1,56 @@
+services:
+  chroma:
+    image: chromadb/chroma:0.5.20
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: querypilot
+      POSTGRES_PASSWORD: querypilot
+      POSTGRES_DB: querypilot
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U querypilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      chroma:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    environment:
+      CHROMA_HOST: chroma
+      CHROMA_PORT: 8000
+      POSTGRES_DSN: postgresql://querypilot:querypilot@postgres:5432/querypilot
+      DATA_DIR: /app/data
+      DEFAULT_DB_PATH: /app/data/fintech.db
+      QUERYPILOT_DEMO: ${QUERYPILOT_DEMO:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      - ./data:/app/data
+
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+
+volumes:
+  chroma_data:
+  pg_data:
