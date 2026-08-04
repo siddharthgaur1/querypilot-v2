@@ -173,7 +173,19 @@ data/          fintech.db (committed seed DB) + examples.json (verified demo Q&A
 nginx/         reverse proxy + static frontend serving
 ```
 
-## Known limits
+## Results
+
+The demo-mode capture above (real request, full safety+RAG+execution path,
+186.6ms) is the only measured latency figure in this repo. No exact-
+match/execution-success accuracy number against a golden question set is
+committed yet — `eval/golden_set.json` + `eval/benchmark.py` (ported from
+v1's manually-curated 20-question set, rewritten against this repo's actual
+`ask()` pipeline) exist for exactly this, but `TODO(metric)`: running it
+needs a live LLM backend (`ANTHROPIC_API_KEY` or Ollama), so the numbers
+aren't in this README yet — run `python eval/benchmark.py` and report the
+printed summary.
+
+## Limitations
 
 - The bundled frontend uses the simpler `POST /query` path, not the
   streaming WebSocket, for the demo UI. `WS /query/stream` exists and works
