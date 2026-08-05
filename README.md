@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)
 
-Production-ready rebuild of [QueryPilot](https://github.com/siddharthgaur1/Query-pilot)
+Production-ready rebuild of [QueryPilot](https://github.com/siddharthgaur1/querypilot)
 (NL→SQL over SQLite): same 4-layer safety system, but Streamlit is gone,
 replaced by a FastAPI backend + a schema-aware RAG layer + Postgres query
 history + Docker Compose. **This is a new, separate repo — the original
