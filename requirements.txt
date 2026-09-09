@@ -9,7 +9,7 @@ python-dotenv>=1.0
 # RAG. Pinned exactly to the chromadb/chroma server image tag in
 # docker-compose.yml — the client/server wire protocol isn't stable across
 # major versions (client 1.x speaks a v2 API the 0.5.20 server doesn't have).
-chromadb==0.5.20
+chromadb==1.5.9
 sentence-transformers>=3.0
 
 # LLM backends (both optional — see querypilot_v2/core/llm.py; without either,
