@@ -55,6 +55,21 @@ query-level guard cannot see the asker. The benchmark contains both an attack
 and three legitimate queries over the same `salary` column; denying the column
 blocks all four. Per-user authorization belongs above this layer.
 
+## Backing services
+
+Chroma and Postgres are published on `127.0.0.1` only (`127.0.0.1:8001:8000`,
+`127.0.0.1:5433:5432`). The API reaches them over the compose network, so the
+host mappings exist for debugging and nothing else.
+
+This matters because Chroma runs with no authentication. `chromadb==0.5.20` has
+three open advisories with **no patched release** as of 2026-09-09 —
+CVE-2026-45833 (critical, code injection via `trust_remote_code` on
+`UPDATE_COLLECTION`), CVE-2026-45830 and CVE-2026-45831 (cross-tenant access and
+RBAC scoping). All three require reaching the Chroma API. The two RBAC issues do
+not apply to a single-tenant deployment with no auth provider configured; the
+code-injection one would, which is why the port is not published to `0.0.0.0`.
+Do not expose Chroma beyond localhost until an upstream fix ships.
+
 ## No paid calls without a key
 
 Claude is only called if `ANTHROPIC_API_KEY` is set. Without it (and without

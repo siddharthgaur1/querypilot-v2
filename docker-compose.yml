@@ -2,7 +2,10 @@ services:
   chroma:
     image: chromadb/chroma:0.5.20
     ports:
-      - "8001:8000"
+      # Loopback-only: the API reaches Chroma over the compose network as
+      # chroma:8000. Publishing this to 0.0.0.0 exposes an unauthenticated
+      # Chroma admin API — see SECURITY.md, "Backing services".
+      - "127.0.0.1:8001:8000"
     volumes:
       - chroma_data:/chroma/chroma
 
@@ -13,7 +16,7 @@ services:
       POSTGRES_PASSWORD: querypilot
       POSTGRES_DB: querypilot
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
