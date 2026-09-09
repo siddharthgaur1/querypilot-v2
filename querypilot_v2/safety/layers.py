@@ -21,12 +21,59 @@ FORBIDDEN = re.compile(
 )
 
 
+# SQLite quoting/comment forms. Keyword and multi-statement checks run against a
+# masked copy of the query in which every quoted run and comment body is blanked
+# out, so `WHERE action = 'insert'` and `notes LIKE '%a;b%'` are not read as a
+# write or as two statements. Masking is only for the checks — the text handed on
+# to SQLite is always the original.
+_QUOTES = {"'": "'", '"': '"', "`": "`", "[": "]"}
+
+
+def _mask_literals(sql: str) -> str:
+    """Blank the contents of string/identifier literals and comments, preserving
+    length. Fails closed: an unterminated literal or block comment is rejected
+    rather than silently masking the rest of the query."""
+    out = list(sql)
+    i, n = 0, len(sql)
+    while i < n:
+        ch = sql[i]
+        if ch == "-" and sql.startswith("--", i):
+            end = sql.find(chr(10), i)
+            end = n if end == -1 else end
+            out[i:end] = " " * (end - i)
+            i = end
+        elif ch == "/" and sql.startswith("/*", i):
+            end = sql.find("*/", i + 2)
+            if end == -1:
+                raise UnsafeQueryError("Unterminated comment in query.")
+            out[i:end + 2] = " " * (end + 2 - i)
+            i = end + 2
+        elif ch in _QUOTES:
+            close = _QUOTES[ch]
+            j = i + 1
+            while j < n:
+                if sql[j] == close:
+                    # '' inside a '...' literal is an escaped quote, not the end.
+                    if close == "'" and j + 1 < n and sql[j + 1] == "'":
+                        j += 2
+                        continue
+                    break
+                j += 1
+            if j >= n:
+                raise UnsafeQueryError("Unterminated string literal in query.")
+            out[i + 1:j] = " " * (j - i - 1)
+            i = j + 1
+        else:
+            i += 1
+    return "".join(out)
+
+
 def layer1_classify(sql: str) -> str:
     """Statement-shape check: single statement, must start SELECT/WITH."""
     cleaned = sql.strip().rstrip(";").strip()
     if not cleaned:
         raise UnsafeQueryError("The model returned an empty query.")
-    if ";" in cleaned:
+    if ";" in _mask_literals(cleaned):
         raise UnsafeQueryError("Multiple statements are not allowed.")
     if not re.match(r"^\s*(select|with)\b", cleaned, re.IGNORECASE):
         raise UnsafeQueryError("Only SELECT / WITH (CTE) queries are allowed.")
@@ -35,7 +82,7 @@ def layer1_classify(sql: str) -> str:
 
 def layer2_injection_patterns(sql: str) -> None:
     """Forbidden-keyword / injection-pattern check."""
-    if FORBIDDEN.search(sql):
+    if FORBIDDEN.search(_mask_literals(sql)):
         raise UnsafeQueryError("Query contains a forbidden keyword (write/DDL operation).")
 
 

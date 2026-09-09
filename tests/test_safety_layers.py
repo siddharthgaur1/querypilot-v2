@@ -51,6 +51,35 @@ def test_authorizer_denies_writes_bypassing_the_regex_layers():
     conn.close()
 
 
+def test_keywords_inside_string_literals_and_comments_are_not_write_operations():
+    """Quoted text is data, not SQL. These are legitimate reads and must pass."""
+    for sql in [
+        "SELECT * FROM audit_log WHERE action = 'insert'",
+        "SELECT * FROM orders WHERE notes LIKE '%truncate the message%'",
+        "SELECT * FROM t WHERE a = 'a;b'",
+        "SELECT * FROM t WHERE a = 'it''s a drop'",
+        'SELECT "drop" FROM t',
+    ]:
+        layer2_injection_patterns(layer1_classify(sql))
+
+
+def test_masking_does_not_open_a_hole():
+    """Same masking must not let a real write or a second statement through."""
+    for sql in [
+        "SELECT 1; DROP TABLE t",
+        "SELECT * FROM t WHERE a='x' AND 1=1; DROP TABLE t",
+        "SELECT 'abc DROP TABLE t",          # unterminated literal -> fail closed
+        "SELECT 1 /* drop",                  # unterminated comment -> fail closed
+        "SELECT 1 -- c" + chr(10) + "; drop table t",  # ; is outside the comment
+    ]:
+        try:
+            layer2_injection_patterns(layer1_classify(sql))
+            raise AssertionError(f"should have been rejected: {sql!r}")
+        except UnsafeQueryError:
+            pass
+
+
+
 def test_schema_chunking_produces_one_chunk_per_table():
     chunks = table_chunks(DB_PATH)
     tables = {c["table"] for c in chunks}
@@ -64,5 +93,7 @@ if __name__ == "__main__":
     test_layer1_allows_select_and_with()
     test_layer2_blocks_forbidden_keywords()
     test_authorizer_denies_writes_bypassing_the_regex_layers()
+    test_keywords_inside_string_literals_and_comments_are_not_write_operations()
+    test_masking_does_not_open_a_hole()
     test_schema_chunking_produces_one_chunk_per_table()
     print("all safety/schema checks passed")
