@@ -11,10 +11,6 @@ replaced by a FastAPI backend + a schema-aware RAG layer + Postgres query
 history + Docker Compose. **This is a new, separate repo — the original
 QueryPilot is untouched.**
 
-> **Demo GIF placeholder** — record `docker compose up` → open http://localhost:8080
-> → ask "Top 5 merchants by total transaction value this year" → drop the GIF at
-> `docs/demo.gif` and reference it here: `![demo](docs/demo.gif)`.
-
 See [SECURITY.md](SECURITY.md) for the safety-layer/security model in full.
 
 ## What changed vs. v1
