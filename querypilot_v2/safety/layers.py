@@ -29,10 +29,14 @@ FORBIDDEN = re.compile(
 _QUOTES = {"'": "'", '"': '"', "`": "`", "[": "]"}
 
 
-def _mask_literals(sql: str) -> str:
+def _mask_literals(sql: str, mask_comments: bool = True) -> str:
     """Blank the contents of string/identifier literals and comments, preserving
     length. Fails closed: an unterminated literal or block comment is rejected
-    rather than silently masking the rest of the query."""
+    rather than silently masking the rest of the query.
+
+    With `mask_comments=False` comment bodies are left in place — comments are
+    still parsed, so a quote inside one cannot desynchronise the scanner, but the
+    `--` / `/*` markers survive for the comment check in layer 2."""
     out = list(sql)
     i, n = 0, len(sql)
     while i < n:
@@ -40,13 +44,15 @@ def _mask_literals(sql: str) -> str:
         if ch == "-" and sql.startswith("--", i):
             end = sql.find(chr(10), i)
             end = n if end == -1 else end
-            out[i:end] = " " * (end - i)
+            if mask_comments:
+                out[i:end] = " " * (end - i)
             i = end
         elif ch == "/" and sql.startswith("/*", i):
             end = sql.find("*/", i + 2)
             if end == -1:
                 raise UnsafeQueryError("Unterminated comment in query.")
-            out[i:end + 2] = " " * (end + 2 - i)
+            if mask_comments:
+                out[i:end + 2] = " " * (end + 2 - i)
             i = end + 2
         elif ch in _QUOTES:
             close = _QUOTES[ch]
@@ -84,6 +90,12 @@ def layer2_injection_patterns(sql: str) -> None:
     """Forbidden-keyword / injection-pattern check."""
     if FORBIDDEN.search(_mask_literals(sql)):
         raise UnsafeQueryError("Query contains a forbidden keyword (write/DDL operation).")
+    # A generated query has no reason to carry a comment. Outside a literal, a
+    # comment only ever hides text from a reviewer or truncates the predicate the
+    # user thought they were getting (`WHERE 1=1 -- ' AND dept='x'`).
+    outside_literals = _mask_literals(sql, mask_comments=False)
+    if "--" in outside_literals or "/*" in outside_literals:
+        raise UnsafeQueryError("Comments are not allowed in a generated query.")
 
 
 def layer3_llm_self_check(question: str, sql: str) -> str | None:

@@ -13,7 +13,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from querypilot_v2.config import ALLOWED_TABLES, DATA_DIR, MAX_ROWS, QUERY_TIMEOUT_S
+from querypilot_v2.config import ALLOWED_TABLES, DATA_DIR, DENIED_COLUMNS, MAX_ROWS, QUERY_TIMEOUT_S
 from querypilot_v2.core import db
 from querypilot_v2.core.llm import chat, has_llm_backend
 from querypilot_v2.rag.history_rag import index_query, retrieve_similar_queries
@@ -106,7 +106,8 @@ def ask(question: str, db_path: str, db_name: str, max_rows: int = MAX_ROWS) -> 
             safe_sql = layer1_classify(sql)
             layer2_injection_patterns(safe_sql)
             capped_rows = min(max_rows, MAX_ROWS)
-            columns, rows, exec_ms = db.execute(safe_sql, db_path, capped_rows, QUERY_TIMEOUT_S, ALLOWED_TABLES)
+            columns, rows, exec_ms = db.execute(safe_sql, db_path, capped_rows, QUERY_TIMEOUT_S,
+                                                ALLOWED_TABLES, DENIED_COLUMNS)
             result.sql, result.columns, result.rows, result.execution_ms = safe_sql, columns, rows, exec_ms
             break
         except (sqlite3.Error, UnsafeQueryError) as e:

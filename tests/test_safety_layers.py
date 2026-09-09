@@ -80,6 +80,60 @@ def test_masking_does_not_open_a_hole():
 
 
 
+def _denied(conn, sql):
+    try:
+        conn.execute(sql).fetchmany(1)
+        return False
+    except sqlite3.DatabaseError:
+        return True
+
+
+def test_authorizer_scopes_reads_to_the_allow_list():
+    """Read-only is not the same as safe: an out-of-scope table must be denied
+    however it is reached — directly, via a join, a subquery, a UNION or a CTE."""
+    conn = connect_readonly(DB_PATH, frozenset({"customers"}))
+    for sql in [
+        "SELECT * FROM merchants",
+        "SELECT c.customer_id, m.name FROM customers c, merchants m",
+        "SELECT (SELECT name FROM merchants LIMIT 1) AS x FROM customers LIMIT 1",
+        "SELECT customer_id FROM customers UNION ALL SELECT merchant_id FROM merchants",
+        "WITH m AS (SELECT name FROM merchants) SELECT * FROM m",
+    ]:
+        assert _denied(conn, sql), f"allow-list should have denied: {sql}"
+    conn.execute("SELECT customer_id FROM customers LIMIT 1").fetchmany(1)
+    conn.close()
+
+
+def test_authorizer_denies_schema_enumeration():
+    """sqlite_master is reconnaissance, not a user question, and is denied even
+    with no allow-list set."""
+    conn = connect_readonly(DB_PATH)
+    assert _denied(conn, "SELECT name, sql FROM sqlite_master")
+    conn.close()
+
+
+def test_authorizer_denies_obfuscating_functions_and_scoped_columns():
+    conn = connect_readonly(DB_PATH)
+    assert _denied(conn, "SELECT * FROM customers WHERE name = char(97,100,109,105,110)")
+    conn.close()
+    conn = connect_readonly(DB_PATH, denied_columns=frozenset({"transactions.amount"}))
+    assert _denied(conn, "SELECT amount FROM transactions")
+    conn.execute("SELECT txn_id FROM transactions LIMIT 1").fetchmany(1)
+    conn.close()
+
+
+def test_layer2_rejects_comments():
+    """`WHERE 1=1 -- ' AND dept='x'` truncates the predicate the user asked for."""
+    for sql in ["SELECT * FROM customers WHERE 1=1 -- ' AND status='x'",
+                "SELECT /* hidden */ * FROM customers"]:
+        try:
+            layer2_injection_patterns(layer1_classify(sql))
+            raise AssertionError(f"comment should have been rejected: {sql!r}")
+        except UnsafeQueryError:
+            pass
+
+
+
 def test_schema_chunking_produces_one_chunk_per_table():
     chunks = table_chunks(DB_PATH)
     tables = {c["table"] for c in chunks}
@@ -95,5 +149,9 @@ if __name__ == "__main__":
     test_authorizer_denies_writes_bypassing_the_regex_layers()
     test_keywords_inside_string_literals_and_comments_are_not_write_operations()
     test_masking_does_not_open_a_hole()
+    test_authorizer_scopes_reads_to_the_allow_list()
+    test_authorizer_denies_schema_enumeration()
+    test_authorizer_denies_obfuscating_functions_and_scoped_columns()
+    test_layer2_rejects_comments()
     test_schema_chunking_produces_one_chunk_per_table()
     print("all safety/schema checks passed")

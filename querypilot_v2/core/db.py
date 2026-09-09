@@ -40,35 +40,63 @@ _ALLOWED_ACTIONS = frozenset(
     {sqlite3.SQLITE_SELECT, sqlite3.SQLITE_READ, sqlite3.SQLITE_FUNCTION, sqlite3.SQLITE_RECURSIVE}
 )
 
+# Functions that turn a literal into something the text layers cannot read
+# (`char(97,100,109,105,110)` is `admin`) or that reach outside the database.
+# A generated query never needs these: if the model wants a literal it can write
+# one. Denied at prepare time, so obfuscation does not buy an attacker anything.
+DENIED_FUNCTIONS = frozenset({"char", "unicode", "load_extension", "readfile", "writefile", "edit"})
 
-def _make_authorizer(allowed_tables: frozenset[str]):
+
+def _make_authorizer(
+    allowed_tables: frozenset[str],
+    denied_columns: frozenset[str] = frozenset(),
+):
     def _authorizer(action, arg1, arg2, db_name, trigger):
         if action not in _ALLOWED_ACTIONS:
             return sqlite3.SQLITE_DENY
-        if (
-            action == sqlite3.SQLITE_READ and allowed_tables and arg1
-            and not arg1.startswith("sqlite_") and arg1 not in allowed_tables
-        ):
+        if action == sqlite3.SQLITE_FUNCTION and (arg2 or "").lower() in DENIED_FUNCTIONS:
             return sqlite3.SQLITE_DENY
+        if action == sqlite3.SQLITE_READ and arg1:
+            # Schema enumeration is reconnaissance, never a user question. The
+            # sqlite_* tables are readable only if named in the allow-list.
+            if arg1.startswith("sqlite_"):
+                return sqlite3.SQLITE_OK if arg1 in allowed_tables else sqlite3.SQLITE_DENY
+            if allowed_tables and arg1 not in allowed_tables:
+                return sqlite3.SQLITE_DENY
+            if denied_columns and arg2:
+                if arg2.lower() in denied_columns or f"{arg1}.{arg2}".lower() in denied_columns:
+                    return sqlite3.SQLITE_DENY
         return sqlite3.SQLITE_OK
     return _authorizer
 
 
 def connect_readonly(
-    db_path: str, allowed_tables: frozenset[str] = frozenset(), timeout: float = 15
+    db_path: str,
+    allowed_tables: frozenset[str] = frozenset(),
+    timeout: float = 15,
+    denied_columns: frozenset[str] = frozenset(),
 ) -> sqlite3.Connection:
     """The real safety boundary (see querypilot_v2/safety/): query_only + an
     authorizer that denies every non-read action at prepare time, regardless
-    of what the regex-based layers already caught or missed."""
+    of what the regex-based layers already caught or missed.
+
+    `allowed_tables` empty means every non-`sqlite_` table is readable — that is
+    the demo default, and it is *not* a safe production posture: read-only is not
+    the same as safe, and an empty allow-list allows `SELECT secret FROM api_keys`.
+    Set `QUERYPILOT_ALLOWED_TABLES` (and `QUERYPILOT_DENIED_COLUMNS` for
+    column-level over-reach) to the scope the user is actually entitled to.
+    """
     conn = sqlite3.connect(db_path, timeout=timeout)
     conn.execute("PRAGMA query_only = ON")
-    conn.set_authorizer(_make_authorizer(allowed_tables))
+    conn.set_authorizer(_make_authorizer(allowed_tables, denied_columns))
     return conn
 
 
 def execute(sql: str, db_path: str, max_rows: int, timeout_s: float,
-            allowed_tables: frozenset[str] = frozenset()) -> tuple[list, list, float]:
-    conn = connect_readonly(db_path, allowed_tables, timeout=timeout_s)
+            allowed_tables: frozenset[str] = frozenset(),
+            denied_columns: frozenset[str] = frozenset()) -> tuple[list, list, float]:
+    conn = connect_readonly(db_path, allowed_tables, timeout=timeout_s,
+                            denied_columns=denied_columns)
     t0 = time.perf_counter()
     conn.set_progress_handler(lambda: (time.perf_counter() - t0) > timeout_s, 1000)
     try:

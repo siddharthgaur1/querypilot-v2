@@ -15,6 +15,16 @@ Every PR here is scored against [query-injection-bench](https://github.com/siddh
 — 129 adversarial SQL cases plus a false-positive set — and CI fails if the guard loses
 ground on the committed baseline. See [`eval/injection_bench.py`](eval/injection_bench.py).
 
+| config | ASR | FPR | safe-work score |
+|---|---|---|---|
+| scoped allow-list (`QUERYPILOT_ALLOWED_TABLES` set) | **0.010** | 0.000 | **0.998** |
+| default, no allow-list | 0.089 | 0.000 | 0.954 |
+
+The gap between those rows is the whole point: read-only is not the same as safe, and
+an unscoped assistant will happily read your secrets table. The one attack that survives
+scoping is column-level over-reach, which needs per-user authorization above this layer —
+see [SECURITY.md](SECURITY.md).
+
 See [SECURITY.md](SECURITY.md) for the safety-layer/security model in full.
 
 ## What changed vs. v1

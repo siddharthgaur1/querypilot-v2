@@ -16,6 +16,12 @@ QUERY_TIMEOUT_S = float(os.environ.get("QUERY_TIMEOUT_S", "15"))
 ALLOWED_TABLES = frozenset(
     t.strip() for t in os.environ.get("QUERYPILOT_ALLOWED_TABLES", "").split(",") if t.strip()
 )
+# Column-level over-reach ("show me every salary") is not a write and not an
+# out-of-scope table, so nothing above catches it. Entries are `column` or
+# `table.column`, matched case-insensitively by the authorizer.
+DENIED_COLUMNS = frozenset(
+    c.strip().lower() for c in os.environ.get("QUERYPILOT_DENIED_COLUMNS", "").split(",") if c.strip()
+)
 
 # Data
 DATA_DIR = os.environ.get("DATA_DIR", "./data")

@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from querypilot_v2 import storage
-from querypilot_v2.config import DATA_DIR, DEFAULT_DB_PATH, MAX_ROWS
+from querypilot_v2.config import ALLOWED_TABLES, DATA_DIR, DEFAULT_DB_PATH, DENIED_COLUMNS, MAX_ROWS
 from querypilot_v2.core import db as core_db
 from querypilot_v2.core.agent import _build_prompt, _demo_answer, _extract_sql, ask
 from querypilot_v2.core.llm import chat_stream, has_llm_backend
@@ -155,7 +155,7 @@ async def query_stream(ws: WebSocket):
         try:
             safe_sql = layer1_classify(sql)
             layer2_injection_patterns(safe_sql)
-            columns, rows, exec_ms = core_db.execute(safe_sql, path, MAX_ROWS, 15)
+            columns, rows, exec_ms = core_db.execute(safe_sql, path, MAX_ROWS, 15, ALLOWED_TABLES, DENIED_COLUMNS)
             await ws.send_json({
                 "event": "result", "sql": safe_sql,
                 "results": [dict(zip(columns, row)) for row in rows],

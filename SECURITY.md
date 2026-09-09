@@ -26,10 +26,34 @@ busy-lock timeout).
 verifies the resolved path stays inside `DATA_DIR` before writing — same
 pattern as the path-traversal fix already applied in finrag/agent-eval-harness.
 
-## Table allow-list
+## Scoping reads
 
-`QUERYPILOT_ALLOWED_TABLES` scopes reads to named tables, enforced by the
-same authorizer — not by string matching against the generated SQL.
+`QUERYPILOT_ALLOWED_TABLES` scopes reads to named tables and
+`QUERYPILOT_DENIED_COLUMNS` withholds individual columns (`column` or
+`table.column`). Both are enforced by the authorizer at prepare time — not by
+string matching against the generated SQL — so an out-of-scope table is denied
+however it is reached: directly, through a join, a scalar subquery, a `UNION`
+or a CTE.
+
+**Leaving the allow-list empty is a demo posture, not a safe one.** Read-only is
+not the same as safe: with no allow-list, `SELECT owner, secret FROM api_keys` is
+a perfectly legal read and the guard has no reason to refuse it. Measured on
+query-injection-bench, that one setting is the difference between an attack
+success rate of **0.089 and 0.010**.
+
+`sqlite_master` and the other `sqlite_*` tables are denied unless explicitly
+named in the allow-list. Schema enumeration is reconnaissance, never a user
+question. A short function deny-list (`char`, `unicode`, `load_extension`,
+`readfile`, `writefile`) blocks literal construction used to evade the text
+layers — `char(97,100,109,105,110)` is `admin`.
+
+### What scoping cannot do
+
+Column scoping withholds columns *nobody* may read. It cannot answer "is this
+person allowed to see salaries?", because that depends on who is asking and a
+query-level guard cannot see the asker. The benchmark contains both an attack
+and three legitimate queries over the same `salary` column; denying the column
+blocks all four. Per-user authorization belongs above this layer.
 
 ## No paid calls without a key
 
