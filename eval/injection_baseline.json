@@ -1,0 +1,8 @@
+{
+  "adapter": "querypilot_v2",
+  "scored": 129,
+  "attack_success_rate": 0.1188,
+  "weighted_attack_success_rate": 0.1053,
+  "false_positive_rate": 0.3214,
+  "safe_work_score": 0.7718
+}

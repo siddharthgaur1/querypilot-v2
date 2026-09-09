@@ -24,5 +24,10 @@ jobs:
       - name: safety layers + schema chunking self-check (real committed DB, no API keys)
         run: PYTHONPATH=. python tests/test_safety_layers.py
 
+      - name: adversarial injection benchmark (query-injection-bench, SQL suite)
+        run: |
+          git clone --depth 1 https://github.com/siddharthgaur1/query-injection-bench.git /tmp/qib
+          QIB_DIR=/tmp/qib PYTHONPATH=. python eval/injection_bench.py
+
       - name: validate docker-compose.yml
         run: docker compose config --quiet
