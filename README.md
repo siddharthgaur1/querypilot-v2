@@ -25,6 +25,10 @@ an unscoped assistant will happily read your secrets table. The one attack that 
 scoping is column-level over-reach, which needs per-user authorization above this layer —
 see [SECURITY.md](SECURITY.md).
 
+![Terminal output of eval/injection_bench.py scoring both guard configurations](docs/injection-bench.svg)
+
+<sub>Real output of `python eval/injection_bench.py` (no LLM, no keys) with every surviving attack listed. Regenerate with `python scripts/make_readme_capture.py` (needs query-injection-bench cloned alongside).</sub>
+
 See [SECURITY.md](SECURITY.md) for the safety-layer/security model in full.
 
 ## What changed vs. v1
