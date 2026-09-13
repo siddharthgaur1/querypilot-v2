@@ -1,0 +1,216 @@
+{
+  "summary": {
+    "single_table": {
+      "n": 4,
+      "exact_match_pct": 0.0,
+      "execution_success_pct": 100.0
+    },
+    "join": {
+      "n": 4,
+      "exact_match_pct": 25.0,
+      "execution_success_pct": 75.0
+    },
+    "aggregation": {
+      "n": 4,
+      "exact_match_pct": 0.0,
+      "execution_success_pct": 100.0
+    },
+    "subquery": {
+      "n": 4,
+      "exact_match_pct": 0.0,
+      "execution_success_pct": 100.0
+    },
+    "ambiguous_column": {
+      "n": 4,
+      "exact_match_pct": 0.0,
+      "execution_success_pct": 100.0
+    },
+    "overall": {
+      "n": 20,
+      "exact_match_pct": 5.0,
+      "execution_success_pct": 95.0
+    }
+  },
+  "per_case": [
+    {
+      "question": "How many customers are there?",
+      "category": "single_table",
+      "sql": "SELECT COUNT(*) AS txn_count FROM customers",
+      "expected_sql": "SELECT COUNT(*) FROM customers",
+      "exec_success": true,
+      "exact_match": false,
+      "latency_s": 129.244
+    },
+    {
+      "question": "List all merchant categories",
+      "category": "single_table",
+      "sql": "SELECT DISTINCT category AS merchant_category FROM merchants",
+      "expected_sql": "SELECT DISTINCT category FROM merchants",
+      "exec_success": true,
+      "exact_match": false,
+      "latency_s": 51.542
+    },
+    {
+      "question": "Show all accounts with balance over 1000",
+      "category": "single_table",
+      "sql": "SELECT account_id, customer_id, account_type, balance, opened_at \nFROM accounts \nWHERE balance > 1000",
+      "expected_sql": "SELECT * FROM accounts WHERE balance > 1000",
+      "exec_success": true,
+      "exact_match": false,
+      "latency_s": 71.144
+    },
+    {
+      "question": "What is the average transaction amount?",
+      "category": "single_table",
+      "sql": "SELECT AVG(amount) AS avg_txn_amount FROM transactions",
+      "expected_sql": "SELECT AVG(amount) AS avg_amount FROM transactions",
+      "exec_success": true,
+      "exact_match": false,
+      "latency_s": 45.975
+    },
+    {
+      "question": "List each customer's name with their account balance",
+      "category": "join",
+      "sql": "SELECT c.name, a.balance FROM accounts a JOIN customers c ON a.customer_id = c.customer_id",
+      "expected_sql": "SELECT c.name, a.balance FROM customers c JOIN accounts a ON c.customer_id = a.customer_id",
+      "exec_success": true,
+      "exact_match": false,
+      "latency_s": 54.932
+    },
+    {
+      "question": "Show transaction amount and merchant name for each transaction",
+      "category": "join",
+      "sql": "SELECT t.amount, m.name FROM transactions t JOIN merchants m ON t.merchant_id = m.merchant_id",
+      "expected_sql": "SELECT t.amount, m.name FROM transactions t JOIN merchants m ON t.merchant_id = m.merchant_id",
+      "exec_success": true,
+      "exact_match": true,
+      "latency_s": 37.565
+    },
+    {
+      "question": "List customers and the number of accounts they have",
+      "category": "join",
+      "sql": "SELECT c.name, COUNT(DISTINCT a.account_id) AS txn_count FROM accounts a JOIN customers c ON a.customer_id = c.customer_id GROUP BY c.customer_id",
+      "expected_sql": "SELECT c.name, COUNT(a.account_id) AS n_accounts FROM customers c JOIN accounts a ON c.customer_id = a.customer_id GROUP BY c.customer_id",
+      "exec_success": true,
+      "exact_match": false,
+      "latency_s": 28.961
+    },
+    {
+      "question": "Show account type and transaction status for each transaction",
+      "category": "join",
+      "sql": "SELECT t.account_type, t.status FROM transactions t JOIN accounts a ON t.account_id = a.account_id",
+      "expected_sql": "SELECT a.account_type, t.status FROM transactions t JOIN accounts a ON t.account_id = a.account_id",
+      "exec_success": false,
+      "exact_match": false,
+      "latency_s": 25.77
+    },
+    {
+      "question": "What is the total transaction amount by payment method?",
+      "category": "aggregation",
+      "sql": "SELECT SUM(amount) AS total_txn_amount, payment_method \nFROM transactions \nGROUP BY payment_method \nORDER BY total_txn_amount DESC",
+      "expected_sql": "SELECT payment_method, SUM(amount) AS total FROM transactions GROUP BY payment_method",
+      "exec_success": true,
+      "exact_match": false,
+      "latency_s": 20.895
+    },
+    {
+      "question": "How many transactions failed for each failure reason?",
+      "category": "aggregation",
+      "sql": "SELECT COUNT(*) AS failed_txn_count, failure_reason \nFROM transactions \nWHERE status = 'failed' \nGROUP BY failure_reason \nORDER BY failed_txn_count DESC",
+      "expected_sql": "SELECT failure_reason, COUNT(*) AS n FROM transactions WHERE status = 'failed' GROUP BY failure_reason",
+      "exec_success": true,
+      "exact_match": false,
+      "latency_s": 37.412
+    },
+    {
+      "question": "What is the average balance by account type?",
+      "category": "aggregation",
+      "sql": "SELECT AVG(CASE WHEN account_type = 'savings' THEN balance ELSE NULL END) AS avg_savings_balance,\n       AVG(CASE WHEN account_type = 'current' THEN balance ELSE NULL END) AS avg_current_balance,\n       AVG(CASE WHEN account_type = 'wallet' THEN balance ELSE NULL END) AS avg_wallet_balance\nFROM accounts",
+      "expected_sql": "SELECT account_type, AVG(balance) AS avg_balance FROM accounts GROUP BY account_type",
+      "exec_success": true,
+      "exact_match": false,
+      "latency_s": 46.02
+    },
+    {
+      "question": "Top 5 merchants by total transaction value",
+      "category": "aggregation",
+      "sql": "WITH txn_amounts AS (\n  SELECT m.merchant_id, m.name, SUM(t.amount) AS total_txn_amount\n  FROM transactions t JOIN merchants m ON t.merchant_id = m.merchant_id\n  GROUP BY m.merchant_id, m.name\n)\nSELECT merchant_id, name, total_txn_amount\nFROM txn_amounts\nORDER BY total_txn_amount DESC\nLIMIT 5",
+      "expected_sql": "SELECT m.name, SUM(t.amount) AS total FROM transactions t JOIN merchants m ON t.merchant_id = m.merchant_id GROUP BY m.merchant_id ORDER BY total DESC LIMIT 5",
+      "exec_success": true,
+      "exact_match": false,
+      "latency_s": 38.825
+    },
+    {
+      "question": "Which customers have an account balance above the average balance?",
+      "category": "subquery",
+      "sql": "SELECT c.name \nFROM accounts a \nJOIN customers c ON a.customer_id = c.customer_id \nWHERE a.balance > (SELECT AVG(CASE WHEN account_type = 'savings' THEN balance ELSE NULL END) \n                   FROM accounts)",
+      "expected_sql": "SELECT c.name FROM customers c JOIN accounts a ON c.customer_id = a.customer_id WHERE a.balance > (SELECT AVG(balance) FROM accounts)",
+      "exec_success": true,
+      "exact_match": false,
+      "latency_s": 32.3
+    },
+    {
+      "question": "Show merchants that have never had a transaction",
+      "category": "subquery",
+      "sql": "SELECT DISTINCT m.merchant_id, m.name FROM merchants m LEFT JOIN transactions t ON m.merchant_id = t.merchant_id WHERE t.txn_id IS NULL",
+      "expected_sql": "SELECT name FROM merchants WHERE merchant_id NOT IN (SELECT merchant_id FROM transactions WHERE merchant_id IS NOT NULL)",
+      "exec_success": true,
+      "exact_match": false,
+      "latency_s": 32.902
+    },
+    {
+      "question": "List accounts belonging to customers in the high risk segment",
+      "category": "subquery",
+      "sql": "SELECT a.account_id, a.balance, c.name \nFROM accounts a \nJOIN customers c ON a.customer_id = c.customer_id \nWHERE c.risk_segment = 'high'",
+      "expected_sql": "SELECT * FROM accounts WHERE customer_id IN (SELECT customer_id FROM customers WHERE risk_segment = 'high')",
+      "exec_success": true,
+      "exact_match": false,
+      "latency_s": 52.717
+    },
+    {
+      "question": "Find customers whose total transaction amount exceeds 5000",
+      "category": "subquery",
+      "sql": "SELECT c.name, SUM(t.amount) AS txn_amount \nFROM transactions t JOIN customers c ON t.account_id = c.customer_id \nGROUP BY c.customer_id \nHAVING SUM(t.amount) > 5000 \nORDER BY txn_amount DESC",
+      "expected_sql": "SELECT c.name FROM customers c WHERE c.customer_id IN (SELECT a.customer_id FROM accounts a JOIN transactions t ON t.account_id = a.account_id GROUP BY a.customer_id HAVING SUM(t.amount) > 5000)",
+      "exec_success": true,
+      "exact_match": false,
+      "latency_s": 48.875
+    },
+    {
+      "question": "Which city has the most customers?",
+      "category": "ambiguous_column",
+      "sql": "SELECT city, COUNT(*) AS txn_count \nFROM customers \nGROUP BY city \nORDER BY txn_count DESC \nLIMIT 1",
+      "expected_sql": "SELECT city, COUNT(*) AS n FROM customers GROUP BY city ORDER BY n DESC LIMIT 1",
+      "exec_success": true,
+      "exact_match": false,
+      "latency_s": 25.294
+    },
+    {
+      "question": "Which city has the most merchants?",
+      "category": "ambiguous_column",
+      "sql": "SELECT city, COUNT(*) AS txn_count \nFROM merchants \nGROUP BY city \nORDER BY txn_count DESC \nLIMIT 1",
+      "expected_sql": "SELECT city, COUNT(*) AS n FROM merchants GROUP BY city ORDER BY n DESC LIMIT 1",
+      "exec_success": true,
+      "exact_match": false,
+      "latency_s": 32.61
+    },
+    {
+      "question": "List merchant names in Mumbai",
+      "category": "ambiguous_column",
+      "sql": "SELECT DISTINCT m.name FROM merchants m WHERE m.city = 'Mumbai'",
+      "expected_sql": "SELECT name FROM merchants WHERE city = 'Mumbai'",
+      "exec_success": true,
+      "exact_match": false,
+      "latency_s": 43.49
+    },
+    {
+      "question": "List customer names in Mumbai",
+      "category": "ambiguous_column",
+      "sql": "SELECT DISTINCT c.name FROM customers c WHERE c.city = 'Mumbai'",
+      "expected_sql": "SELECT name FROM customers WHERE city = 'Mumbai'",
+      "exec_success": true,
+      "exact_match": false,
+      "latency_s": 328.194
+    }
+  ]
+}

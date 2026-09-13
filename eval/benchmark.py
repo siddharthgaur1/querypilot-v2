@@ -80,6 +80,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--db", default="data/fintech.db")
     parser.add_argument("--db-name", default="fintech")
+    parser.add_argument("--out", type=Path, help="also write summary + per-case results as JSON here")
     args = parser.parse_args()
     out = run_benchmark(args.db, args.db_name)
     print(json.dumps(out["summary"], indent=2))
+    if args.out:
+        args.out.write_text(json.dumps(out, indent=2), encoding="utf-8")

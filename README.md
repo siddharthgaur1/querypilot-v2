@@ -191,14 +191,54 @@ nginx/         reverse proxy + static frontend serving
 ## Results
 
 The demo-mode capture above (real request, full safety+RAG+execution path,
-186.6ms) is the only measured latency figure in this repo. No exact-
-match/execution-success accuracy number against a golden question set is
-committed yet — `eval/golden_set.json` + `eval/benchmark.py` (ported from
-v1's manually-curated 20-question set, rewritten against this repo's actual
-`ask()` pipeline) exist for exactly this, but `TODO(metric)`: running it
-needs a live LLM backend (`ANTHROPIC_API_KEY` or Ollama), so the numbers
-aren't in this README yet — run `python eval/benchmark.py` and report the
-printed summary.
+186.6ms) is a separate, keyless measurement.
+
+**Golden-set benchmark — `llama3.2` (3B) via local Ollama, CPU only, 2026-09-13.**
+All 20 questions in `eval/golden_set.json` (4 per category), one run, no
+Anthropic key. Raw output with every generated SQL string and per-question
+latency: [`eval/results/2026-09-13-ollama-llama3.2.json`](eval/results/2026-09-13-ollama-llama3.2.json).
+
+| Category | n | Exact match | Execution success |
+|---|---|---|---|
+| single_table | 4 | 0.0% | 100.0% |
+| join | 4 | 25.0% | 75.0% |
+| aggregation | 4 | 0.0% | 100.0% |
+| subquery | 4 | 0.0% | 100.0% |
+| ambiguous_column | 4 | 0.0% | 100.0% |
+| **overall** | **20** | **5.0%** | **95.0%** |
+
+How to read it:
+
+- **Exact match is a string comparison** (whitespace/case/trailing `;`
+  normalised), not SQL equivalence. Most misses are the model following this
+  repo's own prompt rule to alias aggregates — `SELECT COUNT(*) AS txn_count
+  FROM customers` against `SELECT COUNT(*) FROM customers` scores as a miss.
+  5.0% is a floor on correctness, not an estimate of it.
+- **Execution success means the SQL passed the safety layers and ran without
+  error**, not that it returned the right rows. The one failure invented a
+  column (`t.account_type` on `transactions`). Result-set comparison against
+  `expected_sql` is not implemented.
+- Latency per question (full `ask()`: retrieval, SQL generation, a correction
+  call if the SQL fails, the LLM self-check and a summary call): mean 59.2s, median 41.2s, max 328.2s, 1,219s wall
+  for the 20. The CPU was shared with an unrelated training process, so treat
+  these as an upper bound for this hardware.
+- History RAG was live: each successful answer is indexed, so later questions
+  can retrieve earlier *model-generated* SQL as few-shot examples. Golden
+  `expected_sql` never enters the prompt. Chroma was fresh for the run.
+
+Reproduce (Ollama running with `llama3.2` pulled, no `ANTHROPIC_API_KEY`):
+
+```bash
+docker compose up -d chroma postgres
+pip install -r requirements.txt
+# the API does this on startup; the benchmark calls ask() directly, so index first
+PYTHONPATH=. python -c "from querypilot_v2.rag.schema_rag import index_schema; index_schema('data/fintech.db', 'fintech.db')"
+PYTHONPATH=. python eval/benchmark.py --db data/fintech.db --db-name fintech.db --out eval/results/run.json
+docker compose down -v
+```
+
+`--db-name fintech.db` matters: the API indexes the schema under the file's
+basename, and the script's `fintech` default would retrieve no schema at all.
 
 ## Limitations
 
@@ -206,9 +246,9 @@ printed summary.
   streaming WebSocket, for the demo UI. `WS /query/stream` exists and works
   (tested directly) — wire it into `frontend/index.html` if you want the
   token-by-token UX.
-- `chromadb` client is pinned to `0.5.20` to match the `chromadb/chroma`
-  server image tag — the client/server wire protocol is not stable across
-  major versions (this broke during development: an unpinned client resolved
-  to 1.5.9, which speaks a v2 API the 0.5.20 server doesn't implement).
+- `chromadb` client is pinned to `1.5.9` to match the `chromadb/chroma:1.5.9`
+  server image — the client/server wire protocol is not stable across
+  major versions (a 1.x client speaks a v2 API a 0.5.x server doesn't
+  implement). Bump both together.
 - No caching volume for the HuggingFace model download — the embedding model
   re-downloads on every fresh container (not on restart of an existing one).

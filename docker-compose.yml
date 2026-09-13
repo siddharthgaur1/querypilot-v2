@@ -1,13 +1,15 @@
 services:
   chroma:
-    image: chromadb/chroma:0.5.20
+    # Must match the chromadb client pin in requirements.txt: 1.x clients speak
+    # a v2 API the 0.5.x server does not implement. 1.x persists to /data.
+    image: chromadb/chroma:1.5.9
     ports:
       # Loopback-only: the API reaches Chroma over the compose network as
       # chroma:8000. Publishing this to 0.0.0.0 exposes an unauthenticated
       # Chroma admin API — see SECURITY.md, "Backing services".
       - "127.0.0.1:8001:8000"
     volumes:
-      - chroma_data:/chroma/chroma
+      - chroma_data:/data
 
   postgres:
     image: postgres:16-alpine
