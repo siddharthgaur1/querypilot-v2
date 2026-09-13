@@ -61,14 +61,23 @@ Chroma and Postgres are published on `127.0.0.1` only (`127.0.0.1:8001:8000`,
 `127.0.0.1:5433:5432`). The API reaches them over the compose network, so the
 host mappings exist for debugging and nothing else.
 
-This matters because Chroma runs with no authentication. `chromadb==0.5.20` has
-three open advisories with **no patched release** as of 2026-09-09 —
-CVE-2026-45833 (critical, code injection via `trust_remote_code` on
-`UPDATE_COLLECTION`), CVE-2026-45830 and CVE-2026-45831 (cross-tenant access and
-RBAC scoping). All three require reaching the Chroma API. The two RBAC issues do
-not apply to a single-tenant deployment with no auth provider configured; the
-code-injection one would, which is why the port is not published to `0.0.0.0`.
-Do not expose Chroma beyond localhost until an upstream fix ships.
+This matters because Chroma runs with no authentication. The compose stack runs
+the Chroma server at `1.5.9` (`chromadb/chroma:1.5.9`, matching the
+`chromadb==1.5.9` client), which has four open advisories with **no patched
+release** as of 2026-09-13:
+
+- CVE-2026-45829 (critical) — *pre-authentication* code injection via
+  `trust_remote_code` when creating a collection; affects servers 1.0.0 and later.
+- CVE-2026-45833 (critical) — code injection via `trust_remote_code` on
+  `UPDATE_COLLECTION`.
+- CVE-2026-45830 and CVE-2026-45831 (high) — cross-tenant access and RBAC scoping.
+
+All four require reaching the Chroma API. The two RBAC issues do not apply to a
+single-tenant deployment with no auth provider configured. The two code-injection
+issues do apply, and with no auth configured "pre-authentication" and
+"authenticated" mean the same thing here: anyone who can reach the port. That is
+why the port is not published to `0.0.0.0`. Do not expose Chroma beyond localhost
+until an upstream fix ships.
 
 ## No paid calls without a key
 
