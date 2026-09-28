@@ -34,3 +34,9 @@ jobs:
 
       - name: validate docker-compose.yml
         run: docker compose config --quiet
+
+      - name: validate nginx.conf (nginx -t; `api` mapped so the upstream resolves)
+        run: >
+          docker run --rm --add-host api:127.0.0.1
+          -v "$PWD/nginx/nginx.conf:/etc/nginx/nginx.conf:ro"
+          nginx:1.27-alpine nginx -t
