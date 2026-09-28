@@ -16,7 +16,7 @@ from querypilot_v2.config import ALLOWED_TABLES, DATA_DIR, DEFAULT_DB_PATH, DENI
 from querypilot_v2.core import db as core_db
 from querypilot_v2.core.agent import _build_prompt, _demo_answer, _extract_sql, ask
 from querypilot_v2.core.llm import chat_stream, has_llm_backend
-from querypilot_v2.rag.history_rag import retrieve_similar_queries
+from querypilot_v2.rag.history_rag import index_query, retrieve_similar_queries
 from querypilot_v2.rag.schema_rag import index_schema, retrieve_schema, schema_summary
 from querypilot_v2.safety.layers import layer1_classify, layer2_injection_patterns
 
@@ -94,6 +94,12 @@ def feedback(req: FeedbackRequest):
     if req.rating not in (1, -1):
         raise HTTPException(status_code=400, detail="rating must be 1 or -1")
     storage.save_feedback(req.query_id, req.rating, req.correction)
+    # Few-shot history grows only from confirmed-correct queries (see rag/history_rag.py).
+    # A stable id makes a repeated thumbs-up an upsert, not a duplicate example.
+    if req.rating == 1:
+        q = storage.get_query(req.query_id)
+        if q and not q["error"]:
+            index_query(q["db_name"], q["question"], q["sql"], doc_id=f"query-{req.query_id}")
     return {"status": "ok"}
 
 

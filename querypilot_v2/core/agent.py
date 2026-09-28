@@ -16,7 +16,7 @@ from pathlib import Path
 from querypilot_v2.config import ALLOWED_TABLES, DATA_DIR, DENIED_COLUMNS, MAX_ROWS, QUERY_TIMEOUT_S
 from querypilot_v2.core import db
 from querypilot_v2.core.llm import chat, has_llm_backend
-from querypilot_v2.rag.history_rag import index_query, retrieve_similar_queries
+from querypilot_v2.rag.history_rag import retrieve_similar_queries
 from querypilot_v2.rag.schema_rag import retrieve_schema
 from querypilot_v2.safety.errors import UnsafeQueryError
 from querypilot_v2.safety.layers import layer1_classify, layer2_injection_patterns, layer3_llm_self_check
@@ -135,9 +135,6 @@ def ask(question: str, db_path: str, db_name: str, max_rows: int = MAX_ROWS) -> 
         result.explanation = f"Returned {len(result.rows)} row(s) with columns: {', '.join(result.columns)}."
     if caveat:
         result.explanation = (result.explanation + f" (Self-check note: {caveat})").strip()
-
-    if not result.error:
-        index_query(db_name, question, result.sql)
 
     return result
 

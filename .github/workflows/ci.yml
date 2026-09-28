@@ -24,6 +24,9 @@ jobs:
       - name: safety layers + schema chunking self-check (real committed DB, no API keys)
         run: PYTHONPATH=. python tests/test_safety_layers.py
 
+      - name: API logic self-check (storage + Chroma stubbed, no services)
+        run: PYTHONPATH=. python tests/test_api.py
+
       - name: adversarial injection benchmark (query-injection-bench, SQL suite)
         run: |
           git clone --depth 1 https://github.com/siddharthgaur1/query-injection-bench.git /tmp/qib
