@@ -26,6 +26,8 @@ DENIED_COLUMNS = frozenset(
 # Data
 DATA_DIR = os.environ.get("DATA_DIR", "./data")
 DEFAULT_DB_PATH = os.environ.get("DEFAULT_DB_PATH", os.path.join(DATA_DIR, "fintech.db"))
+# Keep nginx's client_max_body_size in step when changing this.
+MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "50"))
 
 # RAG
 CHROMA_HOST = os.environ.get("CHROMA_HOST", "localhost")
