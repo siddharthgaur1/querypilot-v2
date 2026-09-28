@@ -1,5 +1,9 @@
 """Indexes past (question, sql) pairs and retrieves the top-k most similar
-ones as few-shot examples for the next SQL generation prompt."""
+ones as few-shot examples for the next SQL generation prompt.
+
+Only pairs a user marked correct (POST /feedback, rating 1) are indexed: a
+query that merely executed can still answer the wrong question, and once it is
+retrieved as a few-shot example it teaches the model to repeat the mistake."""
 from __future__ import annotations
 
 import uuid
@@ -13,10 +17,10 @@ def _collection_name(db_name: str) -> str:
     return f"{COLLECTION_PREFIX}__{db_name}"
 
 
-def index_query(db_name: str, question: str, sql: str) -> None:
+def index_query(db_name: str, question: str, sql: str, doc_id: str | None = None) -> None:
     collection = get_or_create_collection(_collection_name(db_name))
     collection.upsert(
-        ids=[str(uuid.uuid4())],
+        ids=[doc_id or str(uuid.uuid4())],
         documents=[question],
         metadatas=[{"sql": sql}],
     )
