@@ -114,5 +114,21 @@ def execute(sql: str, db_path: str, max_rows: int, timeout_s: float,
         conn.close()
 
 
+def is_sqlite_db(path: str) -> bool:
+    """Upload gate: the 16-byte SQLite magic header (an empty file would otherwise
+    open as a valid empty database) plus `PRAGMA quick_check` for corrupt pages."""
+    with open(path, "rb") as f:
+        if f.read(16) != b"SQLite format 3\x00":
+            return False
+    try:
+        conn = sqlite3.connect(path)
+        try:
+            return conn.execute("PRAGMA quick_check").fetchone()[0] == "ok"
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError:
+        return False
+
+
 def list_databases(data_dir: str) -> list[str]:
     return sorted(str(p) for p in Path(data_dir).glob("*.db"))

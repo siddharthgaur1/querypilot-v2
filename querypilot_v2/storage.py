@@ -88,6 +88,17 @@ def list_history(limit: int = 20, offset: int = 0) -> list[dict]:
         _pool.putconn(conn)
 
 
+def get_query(query_id: int) -> dict | None:
+    conn = _pool.getconn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT db_name, question, sql, error FROM query_history WHERE id = %s", (query_id,))
+            row = cur.fetchone()
+            return dict(zip([d.name for d in cur.description], row)) if row else None
+    finally:
+        _pool.putconn(conn)
+
+
 def save_feedback(query_id: int, rating: int, correction: str) -> None:
     conn = _pool.getconn()
     try:

@@ -12,11 +12,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from querypilot_v2 import storage
-from querypilot_v2.config import ALLOWED_TABLES, DATA_DIR, DEFAULT_DB_PATH, DENIED_COLUMNS, MAX_ROWS
+from querypilot_v2.config import (
+    ALLOWED_TABLES,
+    DATA_DIR,
+    DEFAULT_DB_PATH,
+    DENIED_COLUMNS,
+    MAX_ROWS,
+    MAX_UPLOAD_MB,
+)
 from querypilot_v2.core import db as core_db
 from querypilot_v2.core.agent import _build_prompt, _demo_answer, _extract_sql, ask
 from querypilot_v2.core.llm import chat_stream, has_llm_backend
-from querypilot_v2.rag.history_rag import retrieve_similar_queries
+from querypilot_v2.rag.history_rag import index_query, retrieve_similar_queries
 from querypilot_v2.rag.schema_rag import index_schema, retrieve_schema, schema_summary
 from querypilot_v2.safety.layers import layer1_classify, layer2_injection_patterns
 
@@ -94,6 +101,12 @@ def feedback(req: FeedbackRequest):
     if req.rating not in (1, -1):
         raise HTTPException(status_code=400, detail="rating must be 1 or -1")
     storage.save_feedback(req.query_id, req.rating, req.correction)
+    # Few-shot history grows only from confirmed-correct queries (see rag/history_rag.py).
+    # A stable id makes a repeated thumbs-up an upsert, not a duplicate example.
+    if req.rating == 1:
+        q = storage.get_query(req.query_id)
+        if q and not q["error"]:
+            index_query(q["db_name"], q["question"], q["sql"], doc_id=f"query-{req.query_id}")
     return {"status": "ok"}
 
 
@@ -115,9 +128,19 @@ async def upload_db(file: UploadFile):
     if not dest.startswith(os.path.abspath(DATA_DIR) + os.sep):
         raise HTTPException(status_code=400, detail="invalid filename")
 
-    contents = await file.read()
-    with open(dest, "wb") as f:
+    max_bytes = MAX_UPLOAD_MB * 1024 * 1024
+    contents = await file.read(max_bytes + 1)
+    if len(contents) > max_bytes:
+        raise HTTPException(status_code=413, detail=f"database larger than {MAX_UPLOAD_MB} MB")
+
+    # Validate a side file, then swap it in: a bad upload never replaces an existing DB.
+    tmp = dest + ".part"
+    with open(tmp, "wb") as f:
         f.write(contents)
+    if not core_db.is_sqlite_db(tmp):
+        os.remove(tmp)
+        raise HTTPException(status_code=400, detail="not a valid SQLite database")
+    os.replace(tmp, dest)
 
     n_tables = index_schema(dest, safe_name)
     return {"db_name": safe_name, "tables_indexed": n_tables}

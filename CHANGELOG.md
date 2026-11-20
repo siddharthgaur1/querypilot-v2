@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+2026-09-28:
+
+- Few-shot history (Chroma `history__<db>`) is indexed only when a user marks a query correct via `POST /feedback` (rating 1). Previously every query that executed was indexed, so wrong-but-valid SQL became a few-shot example.
+- `/upload-db`: `MAX_UPLOAD_MB` cap (default 50, 413 past it); SQLite magic header + `PRAGMA quick_check` validation on a side file before it replaces anything. nginx `client_max_body_size` raised from the 1m default to 50m to match.
+- `docker-compose.yml`: Chroma healthcheck (bash `/dev/tcp` GET of `/api/v2/heartbeat`; the image has no curl); the API waits for it.
+- nginx: 30 req/min per IP (burst 10, 429) on `/api/query` and the `/api/query/stream` handshake. CI runs `nginx -t`.
+
 2026-09-13:
 
 - First live golden-set run: `llama3.2` (3B) via local Ollama on CPU, all 20 questions — 5.0% exact match, 95.0% execution success. Raw results in `eval/results/2026-09-13-ollama-llama3.2.json`; table and caveats in the README's Results section.

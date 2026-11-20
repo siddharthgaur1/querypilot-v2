@@ -37,7 +37,7 @@ See [SECURITY.md](SECURITY.md) for the safety-layer/security model in full.
 |---|---|---|
 | UI | Streamlit | FastAPI + Alpine.js (no build step) |
 | Prompt schema | Full schema dump, every query | **Top-3 relevant table chunks**, retrieved from Chroma |
-| Few-shot examples | None | Top-3 similar past questions, retrieved from query history |
+| Few-shot examples | None | Top-3 similar past questions, retrieved from queries users marked correct (👍) |
 | History | Local JSON file | Postgres (`query_history`, `feedback`) |
 | Deployment | `streamlit run` | `docker compose up` (api, chroma, postgres, nginx) |
 | Streaming | None | WebSocket `/query/stream` (token-by-token SQL generation) |
