@@ -9,7 +9,7 @@ Production-ready rebuild of [QueryPilot](https://github.com/siddharthgaur1/query
 (NL→SQL over SQLite): same 4-layer safety system, but Streamlit is gone,
 replaced by a FastAPI backend + a schema-aware RAG layer + Postgres query
 history + Docker Compose. **This is a new, separate repo;
-[v1](https://github.com/siddharthgaur1/querypilot) is archived read-only.**
+[v1](https://github.com/siddharthgaur1/querypilot) stays public but is no longer developed.**
 
 Every PR here is scored against [query-injection-bench](https://github.com/siddharthgaur1/query-injection-bench)
 — 129 adversarial SQL cases plus a false-positive set — and CI fails if the guard loses
